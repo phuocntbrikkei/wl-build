@@ -2,11 +2,6 @@
 
 package winapi
 
-// GetWifiConnection returns an empty WifiConnection stub for other systems
-func GetWifiConnection() WifiConnection {
-	return WifiConnection{}
-}
-
 // HasWifiPermission — linux/khác: không chặn (coi như đủ quyền).
 func HasWifiPermission() bool { return true }
 
