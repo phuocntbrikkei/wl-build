@@ -2,7 +2,7 @@ name: Build Client (Wails)
 
 # Repo wl-build = chỉ source Client (Rikkei LMS Connect). Tự build Windows/MacOS/Linux
 # mỗi lần push lên main, chạy tay được (Actions -> Run workflow); push tag vX.Y.Z thì
-# tạo thêm GitHub Release kèm file cài. Rikkei IDE vẫn build ở repo mac-build.
+# tạo thêm GitHub Release kèm file cài. Rikkei IDE build ở repo wl-ide-build.
 # File này được make-wl-build.ps1 chép từ .github/wl/ của repo chính — sửa ở đó.
 on:
   push:

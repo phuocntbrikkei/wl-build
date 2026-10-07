@@ -1,9 +1,9 @@
 package main
 
 import (
-	"client/internal/browser"
 	"archive/zip"
 	"bytes"
+	"client/internal/browser"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -18,11 +18,11 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"strconv"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,8 +41,8 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var blockedReportLast sync.Map        // processName -> time.Time
-var blockedSiteViolationLast sync.Map // blocked-site keyword -> time.Time (throttle vi phạm web)
+var blockedReportLast sync.Map            // processName -> time.Time
+var blockedSiteViolationLast sync.Map     // blocked-site keyword -> time.Time (throttle vi phạm web)
 var unauthorizedAppViolationLast sync.Map // processName -> time.Time
 var screenRecordUploading atomic.Bool
 
@@ -177,6 +177,7 @@ type App struct {
 	fetchAppsMu             sync.Mutex
 	browser                 *browser.Launcher // trình duyệt tích hợp (tiến trình con)
 	browserPolicySet        bool              // đã có chính sách trình duyệt từ cấu hình lớp
+	browserMode             string            // chế độ hiện hành: free | learning | exam (theo cấu hình lớp)
 }
 
 type LocalStats struct {
@@ -199,12 +200,14 @@ type StudentShiftSnapshot struct {
 }
 
 type StudentExamSnapshot struct {
-	ExamRoomID uint   `json:"examRoomId"`
-	ExamName   string `json:"examName"`
-	QuizURL    string `json:"quizUrl"`
-	PaperSent  bool   `json:"paperSent"`
-	PaperTitle string `json:"paperTitle"`
-	Submitted  bool   `json:"submitted"`
+	ExamRoomID uint      `json:"examRoomId"`
+	ExamName   string    `json:"examName"`
+	StartTime  time.Time `json:"startTime"`
+	EndTime    time.Time `json:"endTime"`
+	QuizURL    string    `json:"quizUrl"`
+	PaperSent  bool      `json:"paperSent"`
+	PaperTitle string    `json:"paperTitle"`
+	Submitted  bool      `json:"submitted"`
 }
 
 type StudentDashboardSnapshot struct {
@@ -654,6 +657,11 @@ func (a *App) reportViolationWithScreenshot(kind, reason, screenshot string) {
 // startLocalServer khởi chạy server lắng nghe callback nhận thông tin sinh viên từ webview
 func (a *App) startLocalServer() {
 	mux := http.NewServeMux()
+	// Rikkei Ide gửi link web sang trình duyệt tích hợp (IDE không có trình duyệt riêng).
+	// Chỉ nhận POST có header X-Rikkei-Ide, không bật CORS -> trang web chạy trong
+	// trình duyệt khác không gọi được (trình duyệt sẽ chặn ở bước preflight).
+	mux.HandleFunc("/browser/open", a.handleBrowserOpenFromIDE)
+	mux.HandleFunc("/ide/status", a.handleIDEStatus)
 	mux.HandleFunc("/login-success", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -1042,7 +1050,7 @@ func (a *App) NavigateToLogin() {
 	a.expectingLogin = true
 	a.mu.Unlock()
 	guard.SuppressFor(5 * time.Second)
-	runtime.WindowExecJS(a.ctx, "window.location.href = '" + STUDENT_PORTAL_URL + "'")
+	runtime.WindowExecJS(a.ctx, "window.location.href = '"+STUDENT_PORTAL_URL+"'")
 }
 
 // CheckPermissions trả trạng thái các quyền BẮT BUỘC để chạy giám sát:
@@ -1089,7 +1097,7 @@ func (a *App) Logout() {
 	a.stopWebcamStream()
 
 	guard.SuppressFor(5 * time.Second)
-	runtime.WindowExecJS(a.ctx, "window.location.href = '" + STUDENT_PORTAL_URL + "'")
+	runtime.WindowExecJS(a.ctx, "window.location.href = '"+STUDENT_PORTAL_URL+"'")
 }
 
 // GetStats trả về Wifi, thời gian online/offline và trạng thái giám sát
