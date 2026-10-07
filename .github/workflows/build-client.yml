@@ -70,9 +70,18 @@ jobs:
         if: runner.os == 'Windows'
         run: echo "$(go env GOPATH)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build (Windows x64)
+      # Windows: thêm bộ cài NSIS (RikkeiLmsConnect_vX.Y.Z_Setup.exe) — chạy quyền admin 1 lần,
+      # tự thêm ngoại lệ Microsoft Defender cho thư mục cài trước khi chép file.
+      - name: Cài NSIS (Windows)
         if: runner.os == 'Windows'
-        run: wails build -platform windows/amd64 -clean -ldflags "-s -w"
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) { choco install nsis -y --no-progress }
+          $nsis = Join-Path ${env:ProgramFiles(x86)} "NSIS"
+          if (Test-Path $nsis) { echo $nsis | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
+      - name: Build (Windows x64 + bộ cài)
+        if: runner.os == 'Windows'
+        run: wails build -platform windows/amd64 -clean -nsis -ldflags "-s -w"
       # MacOS: dùng build.sh (ghim min macOS 10.13, ký ad-hoc, chặn build nếu binary còn
       # link ScreenCaptureKit / libswift*, đóng gói .zip + .dmg).
       - name: Build (MacOS universal)

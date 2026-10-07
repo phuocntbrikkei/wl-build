@@ -1,4 +1,4 @@
-Unicode true
+﻿Unicode true
 
 ####
 ## Please note: Template replacements don't work in this file. They are provided with default defines like
@@ -64,14 +64,14 @@ ManifestDPIAware true
 
 !insertmacro MUI_UNPAGE_INSTFILES # Uinstalling page
 
-!insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
+!insertmacro MUI_LANGUAGE "Vietnamese" # Giao diện bộ cài tiếng Việt
 
 ## The following two statements can be used to sign the installer and the uninstaller. The path to the binaries are provided in %1
 #!uninstfinalize 'signtool --file "%1"'
 #!finalize 'signtool --file "%1"'
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe" # Name of the installer's file.
+OutFile "..\..\bin\RikkeiLmsConnect_v${INFO_PRODUCTVERSION}_Setup.exe" # Tên file bộ cài (kèm số phiên bản).
 InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
 ShowInstDetails show # This will always show the installation details.
 
@@ -79,10 +79,27 @@ Function .onInit
    !insertmacro wails.checkArchitecture
 FunctionEnd
 
+# Ngoại lệ Microsoft Defender cho thư mục cài + tiến trình của app. Client chụp màn hình,
+# bắt phím tắt, đặt proxy… nên Defender hay nhận nhầm là mã độc và xoá/chặn file (bản chưa
+# ký số). Bộ cài chạy quyền admin 1 lần nên thêm ngoại lệ ở đây — TRƯỚC khi chép file, để
+# Defender không xoá file ngay lúc giải nén. Máy dùng phần mềm diệt virus khác hoặc Defender
+# bị khoá theo chính sách thì lệnh bỏ qua, không làm hỏng cài đặt.
+!macro rikkei.defenderExclusion OP
+    DetailPrint "Microsoft Defender: ${OP} ngoại lệ cho $INSTDIR"
+    nsExec::ExecToLog `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${OP}-MpPreference -ExclusionPath '$INSTDIR' -ErrorAction SilentlyContinue; ${OP}-MpPreference -ExclusionProcess '$INSTDIR\${PRODUCT_EXECUTABLE}' -ErrorAction SilentlyContinue"`
+    Pop $0
+!macroend
+
 Section
     !insertmacro wails.setShellContext
 
     !insertmacro wails.webview2runtime
+
+    CreateDirectory $INSTDIR
+    !insertmacro rikkei.defenderExclusion "Add"
+
+    # Cài đè bản cũ: xoá file chạy các bản trước (tên file có số phiên bản).
+    Delete "$INSTDIR\RikkeiLmsConnect*.exe"
 
     SetOutPath $INSTDIR
 
@@ -99,6 +116,8 @@ SectionEnd
 
 Section "uninstall"
     !insertmacro wails.setShellContext
+
+    !insertmacro rikkei.defenderExclusion "Remove"
 
     RMDir /r "$AppData\${PRODUCT_EXECUTABLE}" # Remove the WebView2 DataPath
 
