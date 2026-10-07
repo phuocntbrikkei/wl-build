@@ -1,0 +1,6 @@
+﻿# Output build (CI tự tạo lại)
+**/node_modules/
+client/build/bin/
+client/frontend/dist/
+*.log
+.DS_Store

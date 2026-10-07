@@ -1,0 +1,12 @@
+﻿* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+*.bmp binary
+*.woff binary
+*.woff2 binary
+*.gz binary
+*.zip binary
+*.syso binary

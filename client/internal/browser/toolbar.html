@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--bg:#f3f4f8;--field:#fff;--ink:#1e2235;--muted:#5b6175;--line:#d9dce6;--hover:#e6e8f0;--accent:#4b51c4;--learn:#1d6b46;--learn-soft:#e3f3ea;--exam:#a12a1f;--exam-soft:#fbe9e7}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1d27;--field:#262936;--ink:#e8eaf2;--muted:#a3a8bb;--line:#363a4b;--hover:#2f3344;--accent:#9aa0f5;--learn:#7fd4a6;--learn-soft:#1f3329;--exam:#ff9b8f;--exam-soft:#3a201d}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font:13px/1 "Segoe UI",-apple-system,"Noto Sans",Ubuntu,sans-serif;user-select:none}
+.bar{display:flex;align-items:center;gap:4px;height:100%;padding:0 8px;border-bottom:1px solid var(--line)}
+button{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;min-width:32px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink);font:inherit;cursor:pointer}
+button:hover:not(:disabled){background:var(--hover)}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+form{flex:1;min-width:0;display:flex}
+input{flex:1;min-width:0;height:32px;padding:0 12px;border:1px solid var(--line);border-radius:16px;background:var(--field);color:var(--ink);font:inherit;user-select:text}
+input:focus{border-color:var(--accent);outline:none}
+.chip{flex:none;display:none;align-items:center;height:26px;padding:0 10px;border-radius:13px;font-weight:600;font-size:12px;white-space:nowrap}
+.chip.learning{display:inline-flex;color:var(--learn);background:var(--learn-soft)}
+.chip.exam{display:inline-flex;color:var(--exam);background:var(--exam-soft)}
+#allowed{display:none;font-weight:600;color:var(--accent);white-space:nowrap}
+#allowed.on{display:inline-flex}
+@media (max-width:640px){.chip{display:none!important}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="back" title="Quay lại (Alt+←)" aria-label="Quay lại" disabled><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <button id="fwd" title="Tới (Alt+→)" aria-label="Tới" disabled><svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+  <button id="reload" title="Tải lại (F5)" aria-label="Tải lại"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+  <button id="home" title="Trang đầu" aria-label="Trang đầu"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg></button>
+  <form id="f" autocomplete="off"><input id="addr" spellcheck="false" placeholder="Nhập địa chỉ trang web" aria-label="Địa chỉ"></form>
+  <span id="chip" class="chip"></span>
+  <button id="allowed" title="Xem các trang được phép">Trang được phép</button>
+</div>
+<script>
+(function(){
+  function send(o){
+    var s = JSON.stringify(o);
+    if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(s);
+    else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.rk) window.webkit.messageHandlers.rk.postMessage(s);
+  }
+  var addr = document.getElementById('addr');
+  var editing = false, last = '';
+  document.getElementById('back').onclick = function(){ send({cmd:'back'}); };
+  document.getElementById('fwd').onclick = function(){ send({cmd:'forward'}); };
+  document.getElementById('reload').onclick = function(){ send({cmd:'reload'}); };
+  document.getElementById('home').onclick = function(){ send({cmd:'home'}); };
+  document.getElementById('allowed').onclick = function(){ send({cmd:'allowed'}); };
+  document.getElementById('f').onsubmit = function(e){ e.preventDefault(); editing = false; send({cmd:'go', url: addr.value}); addr.blur(); };
+  addr.addEventListener('focus', function(){ editing = true; setTimeout(function(){ addr.select(); }, 0); });
+  addr.addEventListener('blur', function(){ editing = false; addr.value = last; });
+  addr.addEventListener('keydown', function(e){ if (e.key === 'Escape') { addr.value = last; addr.blur(); } });
+  window.rkFocusAddress = function(){ addr.focus(); };
+  window.rkState = function(s){
+    last = s.url || '';
+    if (!editing) addr.value = last;
+    document.getElementById('back').disabled = !s.canBack;
+    document.getElementById('fwd').disabled = !s.canForward;
+    var chip = document.getElementById('chip');
+    chip.className = 'chip ' + (s.mode === 'learning' || s.mode === 'exam' ? s.mode : '');
+    chip.textContent = s.mode === 'exam' ? 'Giờ thi · chỉ trang được phép' : s.mode === 'learning' ? 'Giờ học · chỉ trang được phép' : '';
+    if (s.label) chip.title = s.label;
+    document.getElementById('allowed').className = (s.mode === 'learning' || s.mode === 'exam') ? 'on' : '';
+  };
+  send({cmd:'ready'});
+})();
+</script>
+</body>
+</html>

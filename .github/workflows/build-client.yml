@@ -1,0 +1,125 @@
+name: Build Client (Wails)
+
+# Repo wl-build = chỉ source Client (Rikkei LMS Connect). Tự build Windows/MacOS/Linux
+# mỗi lần push lên main, chạy tay được (Actions -> Run workflow); push tag vX.Y.Z thì
+# tạo thêm GitHub Release kèm file cài. Rikkei IDE vẫn build ở repo mac-build.
+# File này được make-wl-build.ps1 chép từ .github/wl/ của repo chính — sửa ở đó.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Push liên tục thì huỷ lượt build cũ của cùng nhánh, chỉ giữ lượt mới nhất.
+concurrency:
+  group: build-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-14 # Apple Silicon; build.sh build UNIVERSAL nên chạy cả máy Intel
+            name: macos
+          - os: ubuntu-latest
+            name: linux
+    runs-on: ${{ matrix.os }}
+    env:
+      GOTOOLCHAIN: local # không tự tải Go mới hơn (giữ 1.24 -> app chạy được macOS 11)
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài GTK/WebKitGTK (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+
+      # GHIM Go 1.24.x: bản cuối còn chạy trên macOS 11 Big Sur (1.25+ đòi macOS 12/13).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: client/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Kiểm trình duyệt tích hợp trước khi build: chạy test chính sách chặn URL và
+      # biên dịch phần native riêng của từng HĐH (WebView2 / WKWebView / WebKitGTK).
+      - name: Test trình duyệt tích hợp
+        shell: bash
+        run: |
+          TAGS=""
+          if [ "$RUNNER_OS" = "Linux" ]; then TAGS="-tags webkit2_41"; fi
+          go test $TAGS ./internal/browser/
+
+      - name: Cài Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0 # khớp go.mod
+      - name: Thêm GOPATH/bin vào PATH (unix)
+        if: runner.os != 'Windows'
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Thêm GOPATH/bin vào PATH (windows)
+        if: runner.os == 'Windows'
+        run: echo "$(go env GOPATH)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build (Windows x64)
+        if: runner.os == 'Windows'
+        run: wails build -platform windows/amd64 -clean -ldflags "-s -w"
+      # MacOS: dùng build.sh (ghim min macOS 10.13, ký ad-hoc, chặn build nếu binary còn
+      # link ScreenCaptureKit / libswift*, đóng gói .zip + .dmg).
+      - name: Build (MacOS universal)
+        if: runner.os == 'macOS'
+        run: bash ./build.sh
+      - name: Build (Linux amd64)
+        if: runner.os == 'Linux'
+        run: wails build -platform linux/amd64 -tags webkit2_41 -clean -ldflags "-s -w"
+
+      - name: Gom gói MacOS
+        if: runner.os == 'macOS'
+        working-directory: client/build/bin
+        run: |
+          for f in *-macOS-universal.zip *-macOS-universal.dmg; do [ -f "$f" ] && cp "$f" "../../../client-$f"; done
+          ls -la ../../../client-* || true
+      - name: Đóng gói Linux
+        if: runner.os == 'Linux'
+        working-directory: client/build/bin
+        run: tar -czf ../../../client-linux-amd64.tar.gz *
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ matrix.name }}
+          path: |
+            client/build/bin/*.exe
+            client-*-macOS-universal.zip
+            client-*-macOS-universal.dmg
+            client-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [client]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Gộp file
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release/ \;
+          ls -la release
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
