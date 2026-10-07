@@ -22,6 +22,10 @@ export function DownloadExamResource(arg1) {
   return window['go']['main']['App']['DownloadExamResource'](arg1);
 }
 
+export function GetAppVersion() {
+  return window['go']['main']['App']['GetAppVersion']();
+}
+
 export function GetChatConversations() {
   return window['go']['main']['App']['GetChatConversations']();
 }
@@ -54,6 +58,10 @@ export function GetStudentInfo() {
   return window['go']['main']['App']['GetStudentInfo']();
 }
 
+export function GetVersionStatus() {
+  return window['go']['main']['App']['GetVersionStatus']();
+}
+
 export function HandleBeforeClose() {
   return window['go']['main']['App']['HandleBeforeClose']();
 }
@@ -74,6 +82,10 @@ export function OpenBrowser(arg1) {
   return window['go']['main']['App']['OpenBrowser'](arg1);
 }
 
+export function OpenDownloadPage(arg1) {
+  return window['go']['main']['App']['OpenDownloadPage'](arg1);
+}
+
 export function OpenExamPaper() {
   return window['go']['main']['App']['OpenExamPaper']();
 }
@@ -88,6 +100,10 @@ export function OpenExamResource(arg1) {
 
 export function OpenLocationSettings() {
   return window['go']['main']['App']['OpenLocationSettings']();
+}
+
+export function RecheckVersion() {
+  return window['go']['main']['App']['RecheckVersion']();
 }
 
 export function ReloadExamPage() {

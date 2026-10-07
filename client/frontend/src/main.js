@@ -19,7 +19,8 @@ if (typeof window.go.main.App === 'undefined') {
 }
 
 const brandLogoHtml = `<img src="${logoUrl}" alt="Rikkei Lms Connect" class="brand-logo-img" />`;
-const APP_VERSION = '1.3';
+let APP_VERSION = ''; // lấy từ Go (file VERSION) lúc khởi động
+let versionGateShown = false;
 
 // Avatar mặc định (SVG nội tuyến, không phụ thuộc mạng) — dùng khi SV chưa có ảnh hoặc URL ảnh lỗi.
 const DEFAULT_AVATAR = 'data:image/svg+xml;utf8,' + encodeURIComponent(
@@ -106,11 +107,68 @@ function init() {
       }).catch(console.error);
     }
   });
-  checkPermissionsGate();
+  bootVersion().then(checkPermissionsGate);
+  // Bản quá cũ có thể bị chặn giữa chừng (quản trị nâng bản tối thiểu): kiểm tra mỗi 15 giây.
+  setInterval(async () => {
+    try {
+      const vs = await window.go.main.App.GetVersionStatus();
+      if (vs?.required && !versionGateShown) renderVersionGate(vs);
+    } catch { /* ignore */ }
+  }, 15000);
+}
+
+async function bootVersion() {
+  try {
+    APP_VERSION = await window.go.main.App.GetAppVersion();
+  } catch { /* giữ rỗng */ }
+}
+
+// Màn hình chặn khi Client dưới bản tối thiểu SC yêu cầu.
+function renderVersionGate(vs) {
+  versionGateShown = true;
+  document.querySelector('#app').innerHTML = `
+    <div class="login-prompt-container">
+      <div class="card">
+        <div class="login-brand-row">
+          ${brandLogoHtml}
+          <div class="login-brand-text">
+            <div class="login-brand-name">Rikkei Lms Connect <span class="app-version">v${escapeHtml(APP_VERSION)}</span></div>
+            <div class="login-brand-sub">Rikkei Education</div>
+          </div>
+        </div>
+        <h2 class="login-title">Cần cập nhật Rikkei Lms Connect</h2>
+        <p class="login-desc">Bản đang dùng (v${escapeHtml(vs.current || APP_VERSION)}) đã cũ. Nhà trường yêu cầu bản ${escapeHtml(vs.min || 'mới hơn')} trở lên để tiếp tục học và thi.</p>
+        <p class="login-desc">Tải bản mới, cài đè lên bản cũ rồi mở lại ứng dụng.</p>
+        <div style="display:flex;gap:.5rem;margin-top:1rem;">
+          ${vs.downloadUrl ? '<button class="btn btn-primary" id="btn-version-download" style="flex:1;padding:.7rem;">Tải bản mới</button>' : ''}
+          <button class="btn" id="btn-version-recheck" style="flex:1;padding:.7rem;border:1px solid #cbd5e1;border-radius:.6rem;">Kiểm tra lại</button>
+        </div>
+        ${vs.downloadUrl ? '' : '<p class="login-desc" style="margin-top:.75rem;">Vào mục "Ứng dụng học tập" trên LMS để tải bản mới.</p>'}
+      </div>
+    </div>
+  `;
+  const dl = document.getElementById('btn-version-download');
+  if (dl) dl.addEventListener('click', () => window.go.main.App.OpenDownloadPage(vs.downloadUrl));
+  document.getElementById('btn-version-recheck').addEventListener('click', async () => {
+    const fresh = await window.go.main.App.RecheckVersion();
+    if (fresh?.required) {
+      renderVersionGate(fresh);
+    } else {
+      versionGateShown = false;
+      checkPermissionsGate();
+    }
+  });
 }
 
 // Cổng quyền: phải đủ quyền Wi-Fi (Vị trí) + Proxy mới cho vào đăng nhập/giám sát.
 async function checkPermissionsGate() {
+  try {
+    const vs = await window.go.main.App.GetVersionStatus();
+    if (vs?.required) {
+      renderVersionGate(vs);
+      return;
+    }
+  } catch { /* ignore */ }
   let perms = { wifi: false, proxy: false };
   try {
     perms = await window.go.main.App.CheckPermissions();
@@ -536,6 +594,7 @@ function renderDashboard() {
         </div>
       </header>
 
+      <div id="version-banner" class="version-banner" hidden></div>
       <div class="main-grid">
         <div class="card profile-card">
           <div class="avatar-container">
@@ -852,6 +911,21 @@ function startStatsTicker() {
       if (indicator) {
         indicator.className = `status-indicator ${stats.serverReachable ? 'online' : 'offline'}`;
       }
+
+      // Có bản mới (không bắt buộc): dải nhắc trên màn hình chính.
+      const vb = document.getElementById('version-banner');
+      if (vb) {
+        const v = stats.version || {};
+        if (v.outdated && !v.required && v.latest) {
+          vb.hidden = false;
+          vb.innerHTML = `Đã có Rikkei Lms Connect bản ${escapeHtml(v.latest)}. ${v.downloadUrl ? '<button type="button" class="btn btn-link" id="btn-version-banner">Tải bản mới</button>' : 'Tải ở mục "Ứng dụng học tập" trên LMS.'}`;
+          const b = document.getElementById('btn-version-banner');
+          if (b) b.onclick = () => window.go.main.App.OpenDownloadPage(v.downloadUrl);
+        } else {
+          vb.hidden = true;
+        }
+      }
+      if (stats.version?.required && !versionGateShown) renderVersionGate(stats.version);
 
       updateChatBadge();
     } catch (err) {

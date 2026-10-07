@@ -178,6 +178,7 @@ type App struct {
 	browser                 *browser.Launcher // trình duyệt tích hợp (tiến trình con)
 	browserPolicySet        bool              // đã có chính sách trình duyệt từ cấu hình lớp
 	browserMode             string            // chế độ hiện hành: free | learning | exam (theo cấu hình lớp)
+	version                 versionStatus     // kết quả kiểm tra phiên bản gần nhất (app_version.go)
 }
 
 type LocalStats struct {
@@ -305,6 +306,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// Khởi chạy vòng lặp đọc local storage của trang Rikkei Portal khi chưa đăng nhập
 	go a.authStorageScanner()
+
+	// Kiểm tra phiên bản tối thiểu (lúc mở + mỗi 30 phút)
+	go a.versionCheckLoop()
 }
 
 func (a *App) handleGuardViolation(kind, reason string) {
@@ -1133,6 +1137,8 @@ func (a *App) GetStats() map[string]any {
 		"currentShiftEnd":   a.dashboard.CurrentShiftEnd,
 		"inScheduleNow":     a.dashboard.InScheduleNow,
 		"blockerActive":     a.dashboard.BlockerActive,
+		"version":           a.version,
+		"appVersion":        AppVersion,
 		"shifts":            shifts,
 		"exam":              a.dashboard.Exam,
 	}
@@ -1919,9 +1925,12 @@ func (a *App) fetchAllowedApps(classId int64) {
 	}
 	a.mu.Unlock()
 
-	url := fmt.Sprintf("%s/api/classes/%d/allowed-apps?studentId=%d", API_BASE, classId, studentID)
+	req, err := scRequest(http.MethodGet, fmt.Sprintf("%s/api/classes/%d/allowed-apps?studentId=%d", API_BASE, classId, studentID))
+	if err != nil {
+		return
+	}
 	client := http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return
 	}
@@ -1933,15 +1942,19 @@ func (a *App) fetchAllowedApps(classId int64) {
 			BlockedSites string `json:"blockedSites"`
 			BlockedHosts string `json:"blockedHosts"`
 			AllowedWifi  string `json:"allowedWifi"`
-			Exit         bool   `json:"exit"`
-			Reason       string `json:"reason"`
-			ExamMode     bool   `json:"examMode"`
+			Exit           bool   `json:"exit"`
+			Reason         string `json:"reason"`
+			ExamMode       bool   `json:"examMode"`
+			VersionBlocked bool   `json:"versionBlocked"`
 			browserConfig
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			if res.VersionBlocked {
+				a.markVersionBlocked(res.Reason)
+			}
 			if res.Exit {
 				a.mu.Lock()
-				stillExam := a.dashboard.MonitorMode == "exam"
+				stillExam := a.dashboard.MonitorMode == "exam" && !res.VersionBlocked
 				a.mu.Unlock()
 				if stillExam {
 					return
@@ -2001,8 +2014,12 @@ func (a *App) fetchStudentStatus(studentID int64) {
 	if studentID <= 0 {
 		return
 	}
+	req, err := scRequest(http.MethodGet, fmt.Sprintf("%s/api/student/status?studentRkId=%d", API_BASE, studentID))
+	if err != nil {
+		return
+	}
 	client := http.Client{Timeout: 4 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("%s/api/student/status?studentRkId=%d", API_BASE, studentID))
+	resp, err := client.Do(req)
 	if err != nil {
 		return
 	}

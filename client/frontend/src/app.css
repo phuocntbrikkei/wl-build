@@ -1186,3 +1186,25 @@ body {
   70% { box-shadow: 0 0 0 8px rgba(214, 48, 49, 0); }
   100% { box-shadow: 0 0 0 0 rgba(214, 48, 49, 0); }
 }
+
+/* Dải nhắc có bản mới (không bắt buộc) */
+.version-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #fcd34d;
+  border-radius: 0.6rem;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.8rem;
+}
+
+.version-banner .btn-link {
+  margin-left: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #b45309;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}

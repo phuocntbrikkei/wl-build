@@ -77,7 +77,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "Rikkei Lms Connect v1.3 — Rikkei Education",
+		Title:     "Rikkei Lms Connect " + versionLabel() + " — Rikkei Education",
 		Width:     720,
 		Height:    480,
 		MinWidth:  640,
