@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -87,6 +88,26 @@ func scRequest(method, rawURL string) (*http.Request, error) {
 	req.Header.Set("X-App-Version", AppVersion)
 	req.Header.Set("X-App-Platform", appPlatform())
 	return req, nil
+}
+
+// scPostJSON gửi POST JSON tới SC kèm phiên bản Client.
+func scPostJSON(client *http.Client, rawURL string, body []byte) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodPost, rawURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-App-Version", AppVersion)
+	req.Header.Set("X-App-Platform", appPlatform())
+	return client.Do(req)
+}
+
+// versionHeader dùng cho kết nối WebSocket tới SC.
+func versionHeader() http.Header {
+	h := http.Header{}
+	h.Set("X-App-Version", AppVersion)
+	h.Set("X-App-Platform", appPlatform())
+	return h
 }
 
 // checkAppVersion hỏi SC bản tối thiểu / mới nhất.

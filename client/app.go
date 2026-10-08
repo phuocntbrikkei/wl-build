@@ -563,7 +563,7 @@ func (a *App) postViolation(v pendingViolation) bool {
 	}
 	bodyBytes, _ := json.Marshal(payload)
 	client := http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Post(API_BASE+"/api/student/report-violation", "application/json", bytes.NewBuffer(bodyBytes))
+	resp, err := scPostJSON(&client, API_BASE+"/api/student/report-violation", bodyBytes)
 	if err != nil {
 		log.Printf("[VIOLATION] report failed: %v", err)
 		return false
@@ -982,7 +982,7 @@ func (a *App) syncProfileToServer(s *StudentData) {
 	}
 	bodyBytes, _ := json.Marshal(payload)
 	client := http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(API_BASE+"/api/student/sync-log", "application/json", bytes.NewBuffer(bodyBytes))
+	resp, err := scPostJSON(&client, API_BASE+"/api/student/sync-log", bodyBytes)
 	if err != nil {
 		return
 	}
@@ -1508,7 +1508,7 @@ func (a *App) syncLogsToServer() {
 
 	bodyBytes, _ := json.Marshal(payload)
 	client := http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Post(API_BASE+"/api/student/sync-log", "application/json", bytes.NewBuffer(bodyBytes))
+	resp, err := scPostJSON(&client, API_BASE+"/api/student/sync-log", bodyBytes)
 	if err != nil {
 		return
 	}
@@ -1938,10 +1938,10 @@ func (a *App) fetchAllowedApps(classId int64) {
 
 	if resp.StatusCode == http.StatusOK {
 		var res struct {
-			Keywords     string `json:"keywords"`
-			BlockedSites string `json:"blockedSites"`
-			BlockedHosts string `json:"blockedHosts"`
-			AllowedWifi  string `json:"allowedWifi"`
+			Keywords       string `json:"keywords"`
+			BlockedSites   string `json:"blockedSites"`
+			BlockedHosts   string `json:"blockedHosts"`
+			AllowedWifi    string `json:"allowedWifi"`
 			Exit           bool   `json:"exit"`
 			Reason         string `json:"reason"`
 			ExamMode       bool   `json:"examMode"`
@@ -2081,9 +2081,9 @@ func (a *App) connectWS() {
 	wifi := a.wifiSSID
 	a.mu.Unlock()
 
-	wsUrl := fmt.Sprintf("%s/ws?role=student&studentId=%d&classId=%d&examRoomId=%d&wifi=%s", getWsUrl(API_BASE), student.StudentID, classID, examRoomID, url.QueryEscape(wifi))
+	wsUrl := fmt.Sprintf("%s/ws?role=student&studentId=%d&classId=%d&examRoomId=%d&wifi=%s&v=%s", getWsUrl(API_BASE), student.StudentID, classID, examRoomID, url.QueryEscape(wifi), url.QueryEscape(AppVersion))
 	dialer := websocket.Dialer{HandshakeTimeout: 4 * time.Second}
-	conn, _, err := dialer.Dial(wsUrl, nil)
+	conn, _, err := dialer.Dial(wsUrl, versionHeader())
 	if err != nil {
 		a.mu.Lock()
 		a.wsConnecting = false
