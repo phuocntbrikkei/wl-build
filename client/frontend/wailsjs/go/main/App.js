@@ -122,10 +122,6 @@ export function SendWebcamFrame(arg1) {
   return window['go']['main']['App']['SendWebcamFrame'](arg1);
 }
 
-export function SubmitExamWork() {
-  return window['go']['main']['App']['SubmitExamWork']();
-}
-
 export function UnlockChatAudio() {
   return window['go']['main']['App']['UnlockChatAudio']();
 }

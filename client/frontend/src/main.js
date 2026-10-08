@@ -491,9 +491,6 @@ function renderExamPanel() {
   const quizBtn = ex.quizUrl
     ? `<button type="button" class="btn btn-secondary" id="btn-exam-quiz">📝 Làm trắc nghiệm</button>`
     : '';
-  const submitBtn = ex.submitted
-    ? `<span class="exam-done">✓ Đã nộp bài tự luận</span>`
-    : `<button type="button" class="btn btn-primary" id="btn-exam-submit">📦 Nộp bài (chọn folder)</button>`;
   return `
     <div class="card exam-panel" id="exam-panel">
       <div class="card-title-row">
@@ -503,7 +500,6 @@ function renderExamPanel() {
       <div class="exam-panel-actions">
         ${paperBtn}
         ${quizBtn}
-        ${submitBtn}
       </div>
       ${renderExamResources()}
     </div>
@@ -524,19 +520,6 @@ function wireExamPanel() {
   const quiz = document.getElementById('btn-exam-quiz');
   if (quiz) quiz.addEventListener('click', () => {
     window.go.main.App.OpenExamQuiz().catch((e) => alert(e?.message || e));
-  });
-  const submit = document.getElementById('btn-exam-submit');
-  if (submit) submit.addEventListener('click', async () => {
-    try {
-      const name = await window.go.main.App.SubmitExamWork();
-      alert(`Đã nộp bài: ${name}`);
-      const fresh = await window.go.main.App.GetStats();
-      stats = { ...stats, ...fresh };
-      await loadExamPaperFiles();
-      updateExamPanel();
-    } catch (e) {
-      alert(e?.message || e || 'Nộp bài thất bại');
-    }
   });
   document.querySelectorAll('.btn-exam-res-dl').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -567,7 +550,7 @@ function examPanelKey() {
   const ex = stats.exam;
   if (!ex) return '';
   const resCount = Array.isArray(examPaperFiles?.resources) ? examPaperFiles.resources.length : -1;
-  return `${ex.examRoomId}:${ex.paperSent}:${ex.submitted}:${resCount}:${examPaperFilesLoading}`;
+  return `${ex.examRoomId}:${ex.paperSent}:${resCount}:${examPaperFilesLoading}`;
 }
 
 function renderDashboard() {

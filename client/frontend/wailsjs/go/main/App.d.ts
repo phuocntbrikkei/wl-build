@@ -62,6 +62,5 @@ export function SendChatMessage(arg1:string):Promise<void>;
 
 export function SendWebcamFrame(arg1:string):Promise<void>;
 
-export function SubmitExamWork():Promise<string>;
 
 export function UnlockChatAudio():Promise<void>;

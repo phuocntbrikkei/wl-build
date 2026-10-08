@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bytes"
 	"client/internal/browser"
 	"context"
@@ -16,6 +15,7 @@ import (
 	"html"
 	"io"
 	"log"
+	mrand "math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -208,7 +208,6 @@ type StudentExamSnapshot struct {
 	QuizURL    string    `json:"quizUrl"`
 	PaperSent  bool      `json:"paperSent"`
 	PaperTitle string    `json:"paperTitle"`
-	Submitted  bool      `json:"submitted"`
 }
 
 type StudentDashboardSnapshot struct {
@@ -2208,6 +2207,14 @@ func (a *App) connectWS() {
 					a.alertChatIncoming(from, preview)
 				}
 				runtime.EventsEmit(a.ctx, "chat:message", msg.Data)
+			case "config:refresh":
+				// Giáo vụ vừa sửa phòng thi / cấu hình lớp / trình duyệt: tải lại ngay thay vì
+				// chờ chu kỳ 10 giây. Giãn 0–3 giây để server không bị cả lớp hỏi cùng lúc.
+				go func() {
+					time.Sleep(time.Duration(mrand.IntN(3000)) * time.Millisecond)
+					log.Printf("[CLIENT] config:refresh from server")
+					a.refreshStudentData()
+				}()
 			case "exam:paper-sent":
 				runtime.EventsEmit(a.ctx, "exam:paper-sent", msg.Data)
 				a.mu.Lock()
@@ -2944,115 +2951,4 @@ func (a *App) LoadExamViewFile(fileURL string) (map[string]any, error) {
 		"data": base64.StdEncoding.EncodeToString(body),
 		"mime": mime,
 	}, nil
-}
-
-func (a *App) SubmitExamWork() (string, error) {
-	a.mu.Lock()
-	student := a.student
-	exam := a.dashboard.Exam
-	a.mu.Unlock()
-	if student == nil {
-		return "", errors.New("chưa đăng nhập")
-	}
-	if exam == nil {
-		return "", errors.New("không trong giờ thi")
-	}
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Chọn folder bài làm để nộp",
-	})
-	if err != nil {
-		return "", err
-	}
-	if dir == "" {
-		return "", errors.New("đã hủy")
-	}
-	zipPath := filepath.Join(os.TempDir(), fmt.Sprintf("exam_submit_%d_%d.zip", exam.ExamRoomID, time.Now().Unix()))
-	if err := zipFolder(dir, zipPath); err != nil {
-		return "", err
-	}
-	defer os.Remove(zipPath)
-
-	f, err := os.Open(zipPath)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	var body bytes.Buffer
-	w := multipart.NewWriter(&body)
-	_ = w.WriteField("studentRkId", fmt.Sprintf("%d", student.StudentID))
-	part, err := w.CreateFormFile("submission", filepath.Base(zipPath))
-	if err != nil {
-		return "", err
-	}
-	if _, err := io.Copy(part, f); err != nil {
-		return "", err
-	}
-	_ = w.Close()
-
-	req, err := http.NewRequest("POST", API_BASE+"/api/student/exam/submit", &body)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	var res struct {
-		OK       bool   `json:"ok"`
-		FileName string `json:"fileName"`
-		Error    string `json:"error"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&res)
-	if resp.StatusCode >= 300 || !res.OK {
-		if res.Error != "" {
-			return "", errors.New(res.Error)
-		}
-		return "", errors.New("nộp bài thất bại")
-	}
-	a.mu.Lock()
-	if a.dashboard.Exam != nil {
-		a.dashboard.Exam.Submitted = true
-	}
-	a.mu.Unlock()
-	return res.FileName, nil
-}
-
-func zipFolder(srcDir, destZip string) error {
-	out, err := os.Create(destZip)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	zw := zip.NewWriter(out)
-	defer zw.Close()
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return err
-		}
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		hdr, err := zip.FileInfoHeader(info)
-		if err != nil {
-			return err
-		}
-		hdr.Name = rel
-		hdr.Method = zip.Deflate
-		w, err := zw.CreateHeader(hdr)
-		if err != nil {
-			return err
-		}
-		rf, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(w, rf)
-		rf.Close()
-		return copyErr
-	})
 }
