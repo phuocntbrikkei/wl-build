@@ -485,18 +485,19 @@ async function loadExamPaperFiles(force = false) {
 function renderExamPanel() {
   const ex = stats.exam;
   if (!ex || stats.monitorMode !== 'exam') return '';
+  // Phòng chỉ có LINK THI (thường gặp: ca thi của hệ thống khảo thí) -> không hiện "chờ gửi đề".
   const paperBtn = ex.paperSent
     ? `<button type="button" class="btn btn-primary" id="btn-exam-paper">📄 Xem đề${ex.paperTitle ? ` (${ex.paperTitle})` : ''}</button>`
-    : `<span class="exam-wait">Chờ giảng viên gửi đề...</span>`;
+    : (ex.quizUrl ? '' : `<span class="exam-wait">Chờ giảng viên gửi đề...</span>`);
   const quizBtn = ex.quizUrl
-    ? `<button type="button" class="btn btn-secondary" id="btn-exam-quiz">📝 Làm trắc nghiệm</button>`
+    ? `<button type="button" class="btn ${ex.paperSent ? 'btn-secondary' : 'btn-primary'}" id="btn-exam-quiz">Vào link thi</button>`
     : '';
   return `
     <div class="card exam-panel" id="exam-panel">
       <div class="card-title-row">
         <div class="card-title">📝 ${ex.examName || 'Phòng thi'}</div>
       </div>
-      <p class="exam-panel-desc">Đề PDF và tài nguyên xem trong app. Trắc nghiệm mở trang quiz trực tiếp (giữ đăng nhập). F5 / Xóa cache / Về trang chính: menu <strong>Rikkei Lms Connect</strong> (F5, Ctrl+Delete, Ctrl+H).</p>
+      <p class="exam-panel-desc">${ex.quizUrl ? 'Bấm <strong>Vào link thi</strong> để làm bài — thi trên hệ thống khảo thí thì bạn được đăng nhập sẵn bằng tài khoản LMS. ' : ''}Đề PDF và tài nguyên xem trong app. F5 / Xóa cache / Về trang chính: menu <strong>Rikkei Lms Connect</strong> (F5, Ctrl+Delete, Ctrl+H).</p>
       <div class="exam-panel-actions">
         ${paperBtn}
         ${quizBtn}

@@ -2599,7 +2599,7 @@ func (a *App) setLocalBrowserActive(on bool) {
 	a.mu.Unlock()
 }
 
-// ReloadExamPage — F5: làm mới trang / iframe đang mở (trắc nghiệm).
+// ReloadExamPage — F5: làm mới trang / iframe đang mở (link thi).
 func (a *App) ReloadExamPage() {
 	guard.SuppressFor(3 * time.Second)
 	runtime.WindowExecJS(a.ctx, `
@@ -2714,7 +2714,7 @@ func (a *App) GetExamQuizViewURL() (string, error) {
 	}
 	quizURL := strings.TrimSpace(exam.QuizURL)
 	if quizURL == "" {
-		return "", errors.New("Phòng thi chưa cấu hình link trắc nghiệm")
+		return "", errors.New("Phòng thi chưa cấu hình link thi")
 	}
 	return quizURL, nil
 }
@@ -2782,9 +2782,10 @@ func (a *App) OpenExamQuiz() error {
 	if err != nil {
 		return err
 	}
-	// Mở trực tiếp (không iframe) để cookie/localStorage đăng nhập web quiz là first-party.
+	// Mở trực tiếp (không iframe) để cookie/localStorage đăng nhập trang thi là first-party.
+	// Phòng thi của khảo thí: SC trả link /exam/go -> SC đăng nhập khảo thí một chạm rồi chuyển vào ca thi.
 	// F5 / Xóa cache / Về trang chính: menu Rikkei Lms Connect.
-	return a.openExamWebView(viewURL, "Làm trắc nghiệm")
+	return a.openExamWebView(viewURL, "Link thi")
 }
 
 func (a *App) OpenExamResource(fileID uint) error {
