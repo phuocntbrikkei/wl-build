@@ -39,10 +39,15 @@ func GetWifiConnection() WifiConnection {
 	return conn
 }
 
-// HasWifiPermission — trên Windows, khi Location Services TẮT thì netsh che SSID
-// (rỗng). Có đọc được SSID nghĩa là đã đủ quyền đọc Wi-Fi.
+// HasWifiPermission — trên Windows, khi Location Services TẮT thì Windows che tên Wi-Fi (SSID
+// rỗng). Chỉ coi là THIẾU quyền khi máy đang nối Wi-Fi, tên mạng bị che và máy bật được Vị trí;
+// máy không có card Wi-Fi / không nối Wi-Fi (cắm dây) / không bật được Vị trí -> bỏ qua kiểm tra.
 func HasWifiPermission() bool {
-	return strings.TrimSpace(GetWifiConnection().SSID) != ""
+	if strings.TrimSpace(GetWifiConnection().SSID) != "" {
+		return true
+	}
+	st := queryWifiState()
+	return wifiPermissionOK(st, "", st == wifiHidden && locationUnavailable())
 }
 
 // OpenLocationSettings mở trang cài đặt Quyền riêng tư > Vị trí của Windows.
