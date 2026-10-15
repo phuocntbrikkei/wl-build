@@ -128,6 +128,9 @@ type StudentData struct {
 	StudentCode string `json:"studentCode"`
 	Phone       string `json:"phone"`
 	SystemID    int64  `json:"systemId"`
+	// Token phiên client do SC cấp lúc đăng nhập (xem client_auth.go).
+	ClientToken    string `json:"clientToken,omitempty"`
+	ClientTokenExp string `json:"clientTokenExp,omitempty"`
 }
 
 type App struct {
@@ -261,8 +264,15 @@ func (a *App) startup(ctx context.Context) {
 	// tự gỡ ngay để máy không kẹt mạng (không cần mở lại app).
 	proxywatch.Spawn()
 
+	// Mọi request tới SC kèm token phiên client; SC báo token hỏng -> đăng xuất để đăng nhập lại.
+	installSCAuthTransport()
+	authInvalidMu.Lock()
+	authInvalidHook = a.Logout
+	authInvalidMu.Unlock()
+
 	a.loadSession()
 	a.loadStats()
+	go a.refreshClientTokenLoop()
 
 	// Task Manager / kill process lần trước → còn file lock → báo unclean_shutdown
 	a.detectUncleanShutdown()
@@ -767,10 +777,12 @@ func (a *App) startLocalServer() {
 			return
 		}
 		st := &StudentData{
-			StudentID:   rk,
-			FullName:    q.Get("fullName"),
-			StudentCode: q.Get("studentCode"),
-			Email:       q.Get("email"),
+			StudentID:      rk,
+			FullName:       q.Get("fullName"),
+			StudentCode:    q.Get("studentCode"),
+			Email:          q.Get("email"),
+			ClientToken:    strings.TrimSpace(q.Get("clientToken")),
+			ClientTokenExp: strings.TrimSpace(q.Get("clientTokenExp")),
 		}
 		a.saveSession(st)
 		log.Printf("[LOGIN-DONE] %s (%s / rk=%d) đăng nhập qua SC", st.FullName, st.StudentCode, rk)
@@ -922,6 +934,13 @@ func (a *App) loadSession() {
 		}
 		var s StudentData
 		if err := json.Unmarshal(data, &s); err == nil {
+			// Phiên chưa có token phiên client (bản <= 1.4.5) hoặc token đã hết hạn: bắt đăng nhập lại.
+			if !clientTokenUsable(s.ClientToken, s.ClientTokenExp) {
+				log.Printf("[APP] Phiên cũ của %s chưa có / hết hạn token -> cần đăng nhập lại", s.StudentCode)
+				_ = os.Remove(a.sessionPath)
+				return
+			}
+			setClientToken(s.ClientToken, s.ClientTokenExp)
 			a.student = &s
 			log.Printf("[APP] Loaded local session: %s (%s)", s.FullName, s.StudentCode)
 
@@ -959,6 +978,7 @@ func (a *App) saveSession(s *StudentData) {
 	defer a.mu.Unlock()
 
 	a.student = s
+	setClientToken(s.ClientToken, s.ClientTokenExp)
 	data, _ := json.MarshalIndent(s, "", "  ")
 	encrypted, err := encrypt(data)
 	if err == nil {
@@ -1075,6 +1095,7 @@ func (a *App) OpenLocationSettings() {
 
 // Logout đăng xuất sinh viên
 func (a *App) Logout() {
+	setClientToken("", "")
 	a.mu.Lock()
 	a.student = nil
 	a.expectingLogin = true
@@ -2080,7 +2101,7 @@ func (a *App) connectWS() {
 	wifi := a.wifiSSID
 	a.mu.Unlock()
 
-	wsUrl := fmt.Sprintf("%s/ws?role=student&studentId=%d&classId=%d&examRoomId=%d&wifi=%s&v=%s", getWsUrl(API_BASE), student.StudentID, classID, examRoomID, url.QueryEscape(wifi), url.QueryEscape(AppVersion))
+	wsUrl := fmt.Sprintf("%s/ws?role=student&studentId=%d&classId=%d&examRoomId=%d&wifi=%s&v=%s&ct=%s", getWsUrl(API_BASE), student.StudentID, classID, examRoomID, url.QueryEscape(wifi), url.QueryEscape(AppVersion), url.QueryEscape(currentClientToken()))
 	dialer := websocket.Dialer{HandshakeTimeout: 4 * time.Second}
 	conn, _, err := dialer.Dial(wsUrl, versionHeader())
 	if err != nil {
@@ -2704,7 +2725,7 @@ func (a *App) GetExamPaperViewURL() (string, error) {
 	if !exam.PaperSent {
 		return "", errors.New("Giảng viên chưa gửi đề")
 	}
-	return fmt.Sprintf("%s/api/student/exam/download?studentRkId=%d&kind=pdf&view=1", API_BASE, studentID), nil
+	return withClientTokenQuery(fmt.Sprintf("%s/api/student/exam/download?studentRkId=%d&kind=pdf&view=1", API_BASE, studentID)), nil
 }
 
 func (a *App) GetExamQuizViewURL() (string, error) {
@@ -2796,10 +2817,10 @@ func (a *App) OpenExamResource(fileID uint) error {
 	if fileID == 0 {
 		return errors.New("tài nguyên không hợp lệ")
 	}
-	viewURL := fmt.Sprintf(
+	viewURL := withClientTokenQuery(fmt.Sprintf(
 		"%s/api/student/exam/download?studentRkId=%d&kind=resource&fileId=%d&view=1",
 		API_BASE, studentID, fileID,
-	)
+	))
 	title := "Tài nguyên đề thi"
 	files, err := a.GetExamPaperFiles()
 	if err == nil {
